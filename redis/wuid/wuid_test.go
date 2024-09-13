@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/driftboat/wuid/internal"
 	"github.com/edwingeng/slog"
-	"github.com/edwingeng/wuid/internal"
 	"github.com/go-redis/redis"
 )
 
