@@ -3,18 +3,19 @@ package internal
 import (
 	"errors"
 	"fmt"
-	"github.com/edwingeng/slog"
 	"sync"
 	"sync/atomic"
+
+	"github.com/edwingeng/slog"
 )
 
 const (
 	// PanicValue indicates when Next starts to panic.
-	PanicValue int64 = ((1 << 36) * 96 / 100) & ^1023
+	PanicValue int64 = ((1 << 32) * 96 / 100) & ^1023
 	// CriticalValue indicates when to renew the high 28 bits.
-	CriticalValue int64 = ((1 << 36) * 80 / 100) & ^1023
+	CriticalValue int64 = ((1 << 32) * 80 / 100) & ^1023
 	// RenewIntervalMask indicates the 'time' between two renewal attempts.
-	RenewIntervalMask int64 = 0x20000000 - 1
+	RenewIntervalMask int64 = 0x2000000 - 1
 )
 
 const (
@@ -22,8 +23,8 @@ const (
 )
 
 const (
-	H28Mask = 0x07FFFFFF << 36
-	L36Mask = 0x0FFFFFFFFF
+	H32Mask = 0x1FFFFF << 32 //高位有效位21位，js number有效 53位
+	L32Mask = 0x0FFFFFFFF
 )
 
 type WUID struct {
@@ -39,7 +40,7 @@ type WUID struct {
 
 	slog.Logger
 	Name        string
-	H28Verifier func(h28 int64) error
+	h32Verifier func(h32 int64) error
 
 	sync.Mutex
 	Renew func() error
@@ -71,9 +72,9 @@ func NewWUID(name string, logger slog.Logger, opts ...Option) (w *WUID) {
 
 func (w *WUID) Next() int64 {
 	v1 := atomic.AddInt64(&w.N, w.Step)
-	v2 := v1 & L36Mask
+	v2 := v1 & L32Mask
 	if v2 >= PanicValue {
-		panicValue := v1&H28Mask | PanicValue
+		panicValue := v1&H32Mask | PanicValue
 		atomic.CompareAndSwapInt64(&w.N, v1, panicValue)
 		panic(fmt.Errorf("the low 36 bits are about to run out"))
 	}
@@ -86,14 +87,14 @@ func (w *WUID) Next() int64 {
 		return v1
 	case 1:
 		x := v1 ^ w.ObfuscationMask
-		r := v1&H28Mask | x&L36Mask
+		r := v1&H32Mask | x&L32Mask
 		return r
 	case 2:
 		r := v1 / w.Floor * w.Floor
 		return r
 	case 3:
 		x := v1 ^ w.ObfuscationMask
-		q := v1&H28Mask | x&L36Mask
+		q := v1&H32Mask | x&L32Mask
 		r := q / w.Floor * w.Floor
 		return r
 	default:
@@ -131,7 +132,7 @@ func (w *WUID) Reset(n int64) {
 	if n < 0 {
 		panic("n cannot be negative")
 	}
-	if n&L36Mask >= PanicValue {
+	if n&L32Mask >= PanicValue {
 		panic("n is too old")
 	}
 
@@ -152,34 +153,34 @@ func (w *WUID) Reset(n int64) {
 	}
 }
 
-func (w *WUID) VerifyH28(h28 int64) error {
-	if h28 <= 0 {
-		return errors.New("h28 must be positive")
+func (w *WUID) Verifyh32(h32 int64) error {
+	if h32 <= 0 {
+		return errors.New("h32 must be positive")
 	}
 
 	if w.Monolithic {
-		if h28 > 0x07FFFFFF {
-			return errors.New("h28 should not exceed 0x07FFFFFF")
+		if h32 > 0x1FFFFF {
+			return errors.New("h32 should not exceed 0x1FFFFF")
 		}
 	} else {
-		if h28 > 0x00FFFFFF {
-			return errors.New("h28 should not exceed 0x00FFFFFF")
+		if h32 > 0x00FFFFFF {
+			return errors.New("h32 should not exceed 0x00FFFFFF")
 		}
 	}
 
-	current := atomic.LoadInt64(&w.N) >> 36
+	current := atomic.LoadInt64(&w.N) >> 32
 	if w.Monolithic {
-		if h28 == current {
-			return fmt.Errorf("h28 should be a different value other than %d", h28)
+		if h32 == current {
+			return fmt.Errorf("h32 should be a different value other than %d", h32)
 		}
 	} else {
-		if h28 == current&0x00FFFFFF {
-			return fmt.Errorf("h28 should be a different value other than %d", h28)
+		if h32 == current&0x00FFFFFF {
+			return fmt.Errorf("h32 should be a different value other than %d", h32)
 		}
 	}
 
-	if w.H28Verifier != nil {
-		if err := w.H28Verifier(h28); err != nil {
+	if w.h32Verifier != nil {
+		if err := w.h32Verifier(h32); err != nil {
 			return err
 		}
 	}
@@ -189,9 +190,9 @@ func (w *WUID) VerifyH28(h28 int64) error {
 
 type Option func(w *WUID)
 
-func WithH28Verifier(cb func(h28 int64) error) Option {
+func Withh32Verifier(cb func(h32 int64) error) Option {
 	return func(w *WUID) {
-		w.H28Verifier = cb
+		w.h32Verifier = cb
 	}
 }
 

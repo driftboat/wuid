@@ -4,14 +4,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/edwingeng/slog"
-	"github.com/edwingeng/wuid/internal"
-	"github.com/go-redis/redis"
 	"math/rand"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/edwingeng/slog"
+	"github.com/edwingeng/wuid/internal"
+	"github.com/go-redis/redis"
 )
 
 var redisCluster = flag.Bool("cluster", false, "")
@@ -47,12 +48,12 @@ func connect() redis.UniversalClient {
 	}
 }
 
-func TestWUID_LoadH28FromRedis(t *testing.T) {
+func TestWUID_Loadh32FromRedis(t *testing.T) {
 	newClient := func() (redis.UniversalClient, bool, error) {
 		return connect(), true, nil
 	}
 	w := NewWUID("alpha", dumb)
-	err := w.LoadH28FromRedis(newClient, cfg.key)
+	err := w.Loadh32FromRedis(newClient, cfg.key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +63,7 @@ func TestWUID_LoadH28FromRedis(t *testing.T) {
 		if err := w.RenewNow(); err != nil {
 			t.Fatal(err)
 		}
-		expected := ((initial >> 36) + int64(i)) << 36
+		expected := ((initial >> 32) + int64(i)) << 32
 		if atomic.LoadInt64(&w.w.N) != expected {
 			t.Fatalf("w.w.N is %d, while it should be %d. i: %d", atomic.LoadInt64(&w.w.N), expected, i)
 		}
@@ -73,17 +74,17 @@ func TestWUID_LoadH28FromRedis(t *testing.T) {
 	}
 }
 
-func TestWUID_LoadH28FromRedis_Error(t *testing.T) {
+func TestWUID_Loadh32FromRedis_Error(t *testing.T) {
 	w := NewWUID("alpha", dumb)
-	if w.LoadH28FromRedis(nil, "") == nil {
+	if w.Loadh32FromRedis(nil, "") == nil {
 		t.Fatal("key is not properly checked")
 	}
 
 	newErrorClient := func() (redis.UniversalClient, bool, error) {
 		return nil, true, errors.New("beta")
 	}
-	if w.LoadH28FromRedis(newErrorClient, "beta") == nil {
-		t.Fatal(`w.LoadH28FromRedis(newErrorClient, "beta") == nil`)
+	if w.Loadh32FromRedis(newErrorClient, "beta") == nil {
+		t.Fatal(`w.Loadh32FromRedis(newErrorClient, "beta") == nil`)
 	}
 }
 
@@ -106,49 +107,49 @@ func TestWUID_Next_Renew(t *testing.T) {
 	}
 
 	w := NewWUID("alpha", slog.NewScavenger())
-	err := w.LoadH28FromRedis(newClient, cfg.key)
+	err := w.Loadh32FromRedis(newClient, cfg.key)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	h28 := atomic.LoadInt64(&w.w.N) >> 36
-	atomic.StoreInt64(&w.w.N, (h28<<36)|internal.Bye)
+	h32 := atomic.LoadInt64(&w.w.N) >> 32
+	atomic.StoreInt64(&w.w.N, (h32<<32)|internal.Bye)
 	n1a := w.Next()
-	if n1a>>36 != h28 {
-		t.Fatal(`n1a>>36 != h28`)
+	if n1a>>32 != h32 {
+		t.Fatal(`n1a>>32 != h32`)
 	}
 
 	waitUntilNumRenewedReaches(t, w, 1)
 	n1b := w.Next()
-	if n1b != (h28+1)<<36+1 {
-		t.Fatal(`n1b != (h28+1)<<36+1`)
+	if n1b != (h32+1)<<32+1 {
+		t.Fatal(`n1b != (h32+1)<<32+1`)
 	}
 
-	atomic.StoreInt64(&w.w.N, ((h28+1)<<36)|internal.Bye)
+	atomic.StoreInt64(&w.w.N, ((h32+1)<<32)|internal.Bye)
 	n2a := w.Next()
-	if n2a>>36 != h28+1 {
-		t.Fatal(`n2a>>36 != h28+1`)
+	if n2a>>32 != h32+1 {
+		t.Fatal(`n2a>>32 != h32+1`)
 	}
 
 	waitUntilNumRenewedReaches(t, w, 2)
 	n2b := w.Next()
-	if n2b != (h28+2)<<36+1 {
-		t.Fatal(`n2b != (h28+2)<<36+1`)
+	if n2b != (h32+2)<<32+1 {
+		t.Fatal(`n2b != (h32+2)<<32+1`)
 	}
 
-	atomic.StoreInt64(&w.w.N, ((h28+2)<<36)|internal.Bye)
+	atomic.StoreInt64(&w.w.N, ((h32+2)<<32)|internal.Bye)
 	n3a := w.Next()
-	if n3a>>36 != h28+2 {
-		t.Fatal(`n3a>>36 != h28+2`)
+	if n3a>>32 != h32+2 {
+		t.Fatal(`n3a>>32 != h32+2`)
 	}
 
 	waitUntilNumRenewedReaches(t, w, 3)
 	n3b := w.Next()
-	if n3b != (h28+3)<<36+1 {
-		t.Fatal(`n3b != (h28+3)<<36+1`)
+	if n3b != (h32+3)<<32+1 {
+		t.Fatal(`n3b != (h32+3)<<32+1`)
 	}
 
-	atomic.StoreInt64(&w.w.N, ((h28+2)<<36)+internal.Bye+1)
+	atomic.StoreInt64(&w.w.N, ((h32+2)<<32)+internal.Bye+1)
 	for i := 0; i < 100; i++ {
 		w.Next()
 	}
@@ -178,7 +179,7 @@ func Example() {
 
 	// Setup
 	w := NewWUID("alpha", nil)
-	err := w.LoadH28FromRedis(newClient, "wuid")
+	err := w.Loadh32FromRedis(newClient, "wuid")
 	if err != nil {
 		panic(err)
 	}

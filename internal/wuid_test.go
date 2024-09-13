@@ -2,7 +2,6 @@ package internal
 
 import (
 	"errors"
-	"github.com/edwingeng/slog"
 	"math/rand"
 	"sort"
 	"strings"
@@ -10,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/edwingeng/slog"
 )
 
 func (w *WUID) Scavenger() *slog.Scavenger {
@@ -19,7 +20,7 @@ func (w *WUID) Scavenger() *slog.Scavenger {
 func TestWUID_Next(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		w := NewWUID("alpha", nil)
-		w.Reset(int64(i+1) << 36)
+		w.Reset(int64(i+1) << 32)
 		v := atomic.LoadInt64(&w.N)
 		for j := 0; j < 100; j++ {
 			v++
@@ -116,44 +117,44 @@ func waitUntilNumRenewedReaches(t *testing.T, w *WUID, expected int64) {
 func TestWUID_Renew(t *testing.T) {
 	w := NewWUID("alpha", slog.NewScavenger())
 	w.Renew = func() error {
-		w.Reset(((atomic.LoadInt64(&w.N) >> 36) + 1) << 36)
+		w.Reset(((atomic.LoadInt64(&w.N) >> 32) + 1) << 32)
 		return nil
 	}
 
 	w.Reset(Bye)
 	n1a := w.Next()
-	if n1a>>36 != 0 {
-		t.Fatal(`n1a>>36 != 0`)
+	if n1a>>32 != 0 {
+		t.Fatal(`n1a>>32 != 0`)
 	}
 
 	waitUntilNumRenewedReaches(t, w, 1)
 	n1b := w.Next()
-	if n1b != 1<<36+1 {
-		t.Fatal(`n1b != 1<<36+1`)
+	if n1b != 1<<32+1 {
+		t.Fatal(`n1b != 1<<32+1`)
 	}
 
-	w.Reset(1<<36 | Bye)
+	w.Reset(1<<32 | Bye)
 	n2a := w.Next()
-	if n2a>>36 != 1 {
-		t.Fatal(`n2a>>36 != 1`)
+	if n2a>>32 != 1 {
+		t.Fatal(`n2a>>32 != 1`)
 	}
 
 	waitUntilNumRenewedReaches(t, w, 2)
 	n2b := w.Next()
-	if n2b != 2<<36+1 {
-		t.Fatal(`n2b != 2<<36+1`)
+	if n2b != 2<<32+1 {
+		t.Fatal(`n2b != 2<<32+1`)
 	}
 
-	w.Reset(2<<36 | Bye + RenewIntervalMask + 1)
+	w.Reset(2<<32 | Bye + RenewIntervalMask + 1)
 	n3a := w.Next()
-	if n3a>>36 != 2 {
-		t.Fatal(`n3a>>36 != 2`)
+	if n3a>>32 != 2 {
+		t.Fatal(`n3a>>32 != 2`)
 	}
 
 	waitUntilNumRenewedReaches(t, w, 3)
 	n3b := w.Next()
-	if n3b != 3<<36+1 {
-		t.Fatal(`n3b != 3<<36+1`)
+	if n3b != 3<<32+1 {
+		t.Fatal(`n3b != 3<<32+1`)
 	}
 
 	w.Reset(Bye + 1)
@@ -182,12 +183,12 @@ func TestWUID_Renew_Error(t *testing.T) {
 		return errors.New("foo")
 	}
 
-	w.Reset((1 >> 36 << 36) | Bye)
+	w.Reset((1 >> 32 << 32) | Bye)
 	w.Next()
 	waitUntilNumRenewAttemptsReaches(t, w, 1)
 	w.Next()
 
-	w.Reset((2 >> 36 << 36) | Bye)
+	w.Reset((2 >> 32 << 32) | Bye)
 	w.Next()
 	waitUntilNumRenewAttemptsReaches(t, w, 2)
 
@@ -219,12 +220,12 @@ func TestWUID_Renew_Panic(t *testing.T) {
 		panic("foo")
 	}
 
-	w.Reset((1 >> 36 << 36) | Bye)
+	w.Reset((1 >> 32 << 32) | Bye)
 	w.Next()
 	waitUntilNumRenewAttemptsReaches(t, w, 1)
 	w.Next()
 
-	w.Reset((2 >> 36 << 36) | Bye)
+	w.Reset((2 >> 32 << 32) | Bye)
 	w.Next()
 	waitUntilNumRenewAttemptsReaches(t, w, 2)
 
@@ -253,32 +254,32 @@ func TestWUID_Renew_Panic(t *testing.T) {
 func TestWUID_Step(t *testing.T) {
 	const step = 16
 	w := NewWUID("alpha", slog.NewScavenger(), WithStep(step, 0))
-	w.Reset(17 << 36)
+	w.Reset(17 << 32)
 
 	w.Renew = func() error {
-		w.Reset(((atomic.LoadInt64(&w.N) >> 36) + 1) << 36)
+		w.Reset(((atomic.LoadInt64(&w.N) >> 32) + 1) << 32)
 		return nil
 	}
 
 	for i := int64(1); i < 100; i++ {
-		if w.Next()&L36Mask != step*i {
+		if w.Next()&L32Mask != step*i {
 			t.Fatal("w.Next()&L36Mask != step*i")
 		}
 	}
 
 	n1 := w.Next()
-	w.Reset(((n1 >> 36 << 36) | Bye) & ^(step - 1))
+	w.Reset(((n1 >> 32 << 32) | Bye) & ^(step - 1))
 	w.Next()
 	waitUntilNumRenewedReaches(t, w, 1)
 	n2 := w.Next()
 
-	w.Reset(((n2 >> 36 << 36) | Bye) & ^(step - 1))
+	w.Reset(((n2 >> 32 << 32) | Bye) & ^(step - 1))
 	w.Next()
 	waitUntilNumRenewedReaches(t, w, 2)
 	n3 := w.Next()
 
-	if n2>>36-n1>>36 != 1 || n3>>36-n2>>36 != 1 {
-		t.Fatalf("the renew mechanism does not work as expected: %x, %x, %x", n1>>36, n2>>36, n3>>36)
+	if n2>>32-n1>>32 != 1 || n3>>32-n2>>32 != 1 {
+		t.Fatalf("the renew mechanism does not work as expected: %x, %x, %x", n1>>32, n2>>32, n3>>32)
 	}
 
 	var num int
@@ -318,7 +319,7 @@ func TestWUID_Floor(t *testing.T) {
 			}
 		}
 
-		w.Reset(r.Int63n(100) << 36)
+		w.Reset(r.Int63n(100) << 32)
 		baseValue := atomic.LoadInt64(&w.N)
 
 		for i := int64(1); i < 100; i++ {
@@ -351,35 +352,35 @@ func TestWUID_Floor(t *testing.T) {
 	}()
 }
 
-func TestWUID_VerifyH28(t *testing.T) {
+func TestWUID_Verifyh32(t *testing.T) {
 	w1 := NewWUID("alpha", nil)
-	w1.Reset(H28Mask)
-	if err := w1.VerifyH28(100); err != nil {
-		t.Fatalf("VerifyH28 does not work as expected. n: 100, error: %s", err)
+	w1.Reset(H32Mask)
+	if err := w1.Verifyh32(100); err != nil {
+		t.Fatalf("Verifyh32 does not work as expected. n: 100, error: %s", err)
 	}
-	if err := w1.VerifyH28(0); err == nil {
-		t.Fatalf("VerifyH28 does not work as expected. n: 0")
+	if err := w1.Verifyh32(0); err == nil {
+		t.Fatalf("Verifyh32 does not work as expected. n: 0")
 	}
-	if err := w1.VerifyH28(0x08000000); err == nil {
-		t.Fatalf("VerifyH28 does not work as expected. n: 0x08000000")
+	if err := w1.Verifyh32(0x08000000); err == nil {
+		t.Fatalf("Verifyh32 does not work as expected. n: 0x08000000")
 	}
-	if err := w1.VerifyH28(0x07FFFFFF); err == nil {
-		t.Fatalf("VerifyH28 does not work as expected. n: 0x07FFFFFF")
+	if err := w1.Verifyh32(0x07FFFFFF); err == nil {
+		t.Fatalf("Verifyh32 does not work as expected. n: 0x07FFFFFF")
 	}
 
 	w2 := NewWUID("alpha", nil, WithSection(1))
-	w2.Reset(H28Mask)
-	if err := w2.VerifyH28(100); err != nil {
-		t.Fatalf("VerifyH28 does not work as expected. section: 1, n: 100, error: %s", err)
+	w2.Reset(H32Mask)
+	if err := w2.Verifyh32(100); err != nil {
+		t.Fatalf("Verifyh32 does not work as expected. section: 1, n: 100, error: %s", err)
 	}
-	if err := w2.VerifyH28(0); err == nil {
-		t.Fatalf("VerifyH28 does not work as expected. section: 1, n: 0")
+	if err := w2.Verifyh32(0); err == nil {
+		t.Fatalf("Verifyh32 does not work as expected. section: 1, n: 0")
 	}
-	if err := w2.VerifyH28(0x01000000); err == nil {
-		t.Fatalf("VerifyH28 does not work as expected. section: 1, n: 0x01000000")
+	if err := w2.Verifyh32(0x01000000); err == nil {
+		t.Fatalf("Verifyh32 does not work as expected. section: 1, n: 0x01000000")
 	}
-	if err := w2.VerifyH28(0x00FFFFFF); err == nil {
-		t.Fatalf("VerifyH28 does not work as expected. section: 1, n: 0x00FFFFFF")
+	if err := w2.Verifyh32(0x00FFFFFF); err == nil {
+		t.Fatalf("Verifyh32 does not work as expected. section: 1, n: 0x00FFFFFF")
 	}
 }
 
@@ -424,23 +425,23 @@ func TestWithSection_Reset(t *testing.T) {
 			_ = recover()
 		}()
 		w := NewWUID("alpha", nil)
-		w.Reset((1 << 36) | PanicValue)
+		w.Reset((1 << 32) | PanicValue)
 		t.Fatal("Reset should have panicked")
 	}()
 }
 
-func TestWithH28Verifier(t *testing.T) {
-	w := NewWUID("alpha", nil, WithH28Verifier(func(h28 int64) error {
-		if h28 >= 20 {
+func TestWithh32Verifier(t *testing.T) {
+	w := NewWUID("alpha", nil, Withh32Verifier(func(h32 int64) error {
+		if h32 >= 20 {
 			return errors.New("bomb")
 		}
 		return nil
 	}))
-	if err := w.VerifyH28(10); err != nil {
-		t.Fatal("the H28Verifier should not return error")
+	if err := w.Verifyh32(10); err != nil {
+		t.Fatal("the h32Verifier should not return error")
 	}
-	if err := w.VerifyH28(20); err == nil || err.Error() != "bomb" {
-		t.Fatal("the H28Verifier was not called")
+	if err := w.Verifyh32(20); err == nil || err.Error() != "bomb" {
+		t.Fatal("the h32Verifier was not called")
 	}
 }
 
@@ -454,14 +455,14 @@ func TestWithObfuscation(t *testing.T) {
 		t.Fatal(`w1.ObfuscationMask == 0`)
 	}
 
-	w1.Reset(1 << 36)
+	w1.Reset(1 << 32)
 	for i := 1; i < 100; i++ {
 		v := w1.Next()
-		if v&H28Mask != 1<<36 {
-			t.Fatal(`v&H28Mask != 1<<36`)
+		if v&H32Mask != 1<<32 {
+			t.Fatal(`v&h32Mask != 1<<32`)
 		}
 		tmp := v ^ w1.ObfuscationMask
-		if tmp&L36Mask != int64(i) {
+		if tmp&L32Mask != int64(i) {
 			t.Fatal(`tmp&L36Mask != int64(i)`)
 		}
 	}
@@ -474,17 +475,17 @@ func TestWithObfuscation(t *testing.T) {
 		t.Fatal(`w2.ObfuscationMask == 0`)
 	}
 
-	w2.Reset(1 << 36)
+	w2.Reset(1 << 32)
 	for i := 1; i < 100; i++ {
 		v := w2.Next()
 		if v%w2.Floor != 0 {
 			t.Fatal(`v%w2.Floor != 0`)
 		}
-		if v&H28Mask != 1<<36 {
-			t.Fatal(`v&H28Mask != 1<<36`)
+		if v&H32Mask != 1<<32 {
+			t.Fatal(`v&h32Mask != 1<<32`)
 		}
 		tmp := v ^ w2.ObfuscationMask
-		if tmp&L36Mask&^(w2.Step-1) != w2.Step*int64(i) {
+		if tmp&L32Mask&^(w2.Step-1) != w2.Step*int64(i) {
 			t.Fatal(`tmp&L36Mask&^(w2.Step-1) != w2.Step*int64(i)`)
 		}
 	}
@@ -497,17 +498,17 @@ func TestWithObfuscation(t *testing.T) {
 		t.Fatal(`w3.ObfuscationMask == 0`)
 	}
 
-	w3.Reset(1<<36 + 1)
+	w3.Reset(1<<32 + 1)
 	for i := 1; i < 100; i++ {
 		v := w3.Next()
 		if v%w3.Floor != 0 {
 			t.Fatal(`v%w3.Floor != 0`)
 		}
-		if v&H28Mask != 1<<36 {
-			t.Fatal(`v&H28Mask != 1<<36`)
+		if v&H32Mask != 1<<32 {
+			t.Fatal(`v&h32Mask != 1<<32`)
 		}
 		tmp := v ^ w3.ObfuscationMask
-		if tmp&L36Mask&^(w3.Step-1) != w3.Step*int64(i+1) {
+		if tmp&L32Mask&^(w3.Step-1) != w3.Step*int64(i+1) {
 			t.Fatal(`tmp&L36Mask&^(w3.Step-1) != w3.Step*int64(i+1)`)
 		}
 	}

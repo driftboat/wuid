@@ -3,10 +3,11 @@ package wuid
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/edwingeng/slog"
 	"github.com/edwingeng/wuid/internal"
 	"github.com/go-redis/redis/v8"
-	"time"
 )
 
 // WUID is an extremely fast universal unique identifier generator.
@@ -26,10 +27,10 @@ func (w *WUID) Next() int64 {
 
 type NewClient func() (client redis.UniversalClient, autoClose bool, err error)
 
-// LoadH28FromRedis adds 1 to a specific number in Redis and fetches its new value.
+// Loadh32FromRedis adds 1 to a specific number in Redis and fetches its new value.
 // The new value is used as the high 28 bits of all generated numbers. In addition, all the
 // arguments passed in are saved for future renewal.
-func (w *WUID) LoadH28FromRedis(newClient NewClient, key string) error {
+func (w *WUID) Loadh32FromRedis(newClient NewClient, key string) error {
 	if len(key) == 0 {
 		return errors.New("key cannot be empty")
 	}
@@ -46,16 +47,16 @@ func (w *WUID) LoadH28FromRedis(newClient NewClient, key string) error {
 
 	ctx1, cancel1 := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel1()
-	h28, err := client.Incr(ctx1, key).Result()
+	h32, err := client.Incr(ctx1, key).Result()
 	if err != nil {
 		return err
 	}
-	if err = w.w.VerifyH28(h28); err != nil {
+	if err = w.w.Verifyh32(h32); err != nil {
 		return err
 	}
 
-	w.w.Reset(h28 << 36)
-	w.w.Logger.Infof("<wuid> new h28: %d. name: %s", h28, w.w.Name)
+	w.w.Reset(h32 << 32)
+	w.w.Logger.Infof("<wuid> new h32: %d. name: %s", h32, w.w.Name)
 
 	w.w.Lock()
 	defer w.w.Unlock()
@@ -64,7 +65,7 @@ func (w *WUID) LoadH28FromRedis(newClient NewClient, key string) error {
 		return nil
 	}
 	w.w.Renew = func() error {
-		return w.LoadH28FromRedis(newClient, key)
+		return w.Loadh32FromRedis(newClient, key)
 	}
 
 	return nil
@@ -77,9 +78,9 @@ func (w *WUID) RenewNow() error {
 
 type Option = internal.Option
 
-// WithH28Verifier adds an extra verifier for the high 28 bits.
-func WithH28Verifier(cb func(h28 int64) error) Option {
-	return internal.WithH28Verifier(cb)
+// Withh32Verifier adds an extra verifier for the high 28 bits.
+func Withh32Verifier(cb func(h32 int64) error) Option {
+	return internal.Withh32Verifier(cb)
 }
 
 // WithSection brands a section ID on each generated number. A section ID must be in between [0, 7].

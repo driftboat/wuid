@@ -43,7 +43,7 @@ newClient := func() (redis.UniversalClient, bool, error) {
 
 // Setup
 w := NewWUID("alpha", nil)
-err := w.LoadH28FromRedis(newClient, "wuid")
+err := w.Loadh32FromRedis(newClient, "wuid")
 if err != nil {
     panic(err)
 }
@@ -66,7 +66,7 @@ openDB := func() (*sql.DB, bool, error) {
 
 // Setup
 w := NewWUID("alpha", nil)
-err := w.LoadH28FromMysql(openDB, "wuid")
+err := w.Loadh32FromMysql(openDB, "wuid")
 if err != nil {
     panic(err)
 }
@@ -89,7 +89,7 @@ newClient := func() (*mongo.Client, bool, error) {
 
 // Setup
 w := NewWUID("alpha", nil)
-err := w.LoadH28FromMongo(newClient, "test", "wuid", "default")
+err := w.Loadh32FromMongo(newClient, "test", "wuid", "default")
 if err != nil {
     panic(err)
 }
@@ -105,14 +105,14 @@ for i := 0; i < 10; i++ {
 import "github.com/edwingeng/wuid/callback/wuid"
 
 callback := func() (int64, func(), error) {
-    var h28 int64
+    var h32 int64
     // ...
-    return h28, nil, nil
+    return h32, nil, nil
 }
 
 // Setup
 w := NewWUID("alpha", nil)
-err := w.LoadH28WithCallback(callback)
+err := w.Loadh32WithCallback(callback)
 if err != nil {
     panic(err)
 }
