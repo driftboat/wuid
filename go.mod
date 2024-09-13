@@ -1,4 +1,4 @@
-module github.com/edwingeng/wuid
+module github.com/driftboat/wuid
 
 go 1.18
 
